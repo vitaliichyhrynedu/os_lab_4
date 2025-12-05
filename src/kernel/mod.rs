@@ -1,5 +1,7 @@
 use crate::hardware::storage::Storage;
 
+mod fs;
+
 /// A model for the kernel
 pub struct Kernel {
     storage: Storage,
