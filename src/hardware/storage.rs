@@ -57,6 +57,16 @@ impl Block {
             data: [0u8; BLOCK_SIZE as usize],
         }
     }
+
+    /// Creates a block from a pointer to a sized type if it fits
+    pub unsafe fn from_sized<T: Sized>(data: &T) -> Result<Self, &'static str> {
+        let size = size_of::<T>();
+        if size > BLOCK_SIZE as usize {
+            return Err("Sized type doesn't fit in a block");
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(data as *const _ as *const u8, size) };
+        Ok(Block::from(bytes))
+    }
 }
 
 impl From<&[u8]> for Block {
