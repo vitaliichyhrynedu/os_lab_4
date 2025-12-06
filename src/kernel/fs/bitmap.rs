@@ -4,10 +4,10 @@ pub struct Bitmap {
 }
 
 impl Bitmap {
-    /// Constructs a zero-initialized bitmap
-    pub fn new(obj_count: u64) -> Self {
+    /// Constructs a zero-initialized bitmap that consists of a given object count
+    pub fn new(count: u64) -> Self {
         Bitmap {
-            allocs: vec![Allocation::default(); obj_count as usize],
+            allocs: vec![Allocation::default(); count as usize],
         }
     }
 
@@ -56,6 +56,16 @@ impl Bitmap {
     pub fn as_slice(&self) -> &[Allocation] {
         &self.allocs
     }
+
+    /// Constructs a bitmap from a slice of bytes
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        let count = bytes.len();
+        let mut allocs = Vec::with_capacity(count);
+        for &byte in bytes {
+            allocs.push(Allocation::try_from(byte)?);
+        }
+        Ok(Self { allocs })
+    }
 }
 
 /// Represents allocation state of an object
@@ -65,4 +75,16 @@ pub enum Allocation {
     #[default]
     Free,
     Used,
+}
+
+impl TryFrom<u8> for Allocation {
+    type Error = &'static str;
+
+    fn try_from(byte: u8) -> Result<Self, Self::Error> {
+        match byte {
+            0 => Ok(Self::Free),
+            1 => Ok(Self::Used),
+            _ => Err("Unexpected byte"),
+        }
+    }
 }
