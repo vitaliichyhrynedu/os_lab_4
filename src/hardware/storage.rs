@@ -67,6 +67,17 @@ impl Block {
         let bytes = unsafe { std::slice::from_raw_parts(data as *const _ as *const u8, size) };
         Ok(Block::from(bytes))
     }
+
+    /// Returns a pointer to the data inside the block, interpreting it as a sized type `T`
+    ///
+    /// # Safety: T must be #[repr(C)]
+    pub unsafe fn as_sized<T: Sized>(&self) -> Result<&T, &'static str> {
+        let size = size_of::<T>();
+        if size > BLOCK_SIZE as usize {
+            return Err("Sized type doesn't fit in a block");
+        }
+        Ok(unsafe { &*(self.data.as_ptr() as *const T) })
+    }
 }
 
 impl From<&[u8]> for Block {
