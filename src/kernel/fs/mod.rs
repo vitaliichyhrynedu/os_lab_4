@@ -1,15 +1,11 @@
-pub mod inode;
-
-use std::slice;
-
+use bitmap::*;
 use inode::*;
 
 pub mod bitmap;
-use bitmap::*;
-
 pub mod directory;
+pub mod inode;
 
-use crate::hardware::storage::{BLOCK_SIZE, Block, Storage};
+use crate::hardware::storage::{Storage, block::BLOCK_SIZE, block::Block};
 
 pub const ROOT_INUMBER: u64 = 1;
 
@@ -28,57 +24,71 @@ impl FileSystem {
         let fs = Self {
             superblock: Superblock::new(BLOCK_SIZE, block_count, inode_count),
         };
-        let block = unsafe { Block::from_sized(&fs.superblock) }?;
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                &fs.superblock as *const _ as *const u8,
+                size_of::<Superblock>(),
+            )
+        };
+        let block = unsafe { Block::try_from(bytes) }.expect("Superblock cannot exceed BLOCK_SIZE");
         storage
-            .write_block(0, &block)
-            .map_err(|_| "Failed to write superblock")?;
+            .write_block(&block, 0)
+            .map_err(|e| "Failed to write superblock: {e}")?;
 
+        // Initialize metadata
+        let mut inode_bitmap = Bitmap::new(inode_count);
         let mut block_bitmap = Bitmap::new(block_count);
-        let inode_bitmap = Bitmap::new(inode_count);
-        let inode_table = InodeTable::new(inode_count);
+        let mut inode_table = InodeTable::new(inode_count);
 
-        // Mark the blocks belonging to the metadata regions as used
-        block_bitmap.allocate_span(0, fs.superblock.data_start_block)?;
+        // Allocate superblock
+        block_bitmap.allocate(0)?;
 
-        // TODO: Create a root directory
+        // Allocate and write inode bitmap
+        let start = fs.superblock.inode_bitmap_start_block;
+        let end = fs.superblock.block_bitmap_start_block;
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                inode_bitmap.as_slice() as *const _ as *const u8,
+                size_of::<Superblock>(),
+            )
+        };
+        let blocks = unsafe { Block::from_bytes(bytes) };
+        let indices = block_bitmap.allocate_span(start, end)?;
+        storage
+            .write_blocks(&blocks, &indices)
+            .map_err(|_| "Failed to write inode bitmap")?;
 
-        // Write metadata to storage
-        Self::write_slice(
-            storage,
-            fs.superblock.block_bitmap_start_block,
-            block_bitmap.as_slice(),
-        )
-        .map_err(|_| "Failed to write block bitmap")?;
-        Self::write_slice(
-            storage,
-            fs.superblock.inode_bitmap_start_block,
-            inode_bitmap.as_slice(),
-        )
-        .map_err(|_| "Failed to write inode bitmap")?;
-        Self::write_slice(
-            storage,
-            fs.superblock.inode_table_start_block,
-            inode_table.as_slice(),
-        )
-        .map_err(|_| "Failed to write inode table")?;
+        // Allocate and write the inode table
+        let start = fs.superblock.inode_table_start_block;
+        let end = fs.superblock.data_start_block;
+        let indices = block_bitmap.allocate_span(start, end)?;
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                inode_table.as_slice() as *const _ as *const u8,
+                size_of::<Superblock>(),
+            )
+        };
+        let blocks = unsafe { Block::from_bytes(bytes) };
+        storage
+            .write_blocks(&blocks, &indices)
+            .map_err(|_| "Failed to write inode table")?;
+
+        // Allocate and write the block bitmap
+        let start = fs.superblock.block_bitmap_start_block;
+        let end = fs.superblock.inode_table_start_block;
+        let indices = block_bitmap.allocate_span(start, end)?;
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                block_bitmap.as_slice() as *const _ as *const u8,
+                size_of::<Superblock>(),
+            )
+        };
+        let blocks = unsafe { Block::from_bytes(bytes) };
+        storage
+            .write_blocks(&blocks, &indices)
+            .map_err(|_| "Failed to write block bitmap")?;
 
         Ok(fs)
-    }
-
-    /// Writes a slice to storage, fitting its contents into blocks
-    fn write_slice<T>(storage: &mut Storage, start_block: u64, data: &[T]) -> Result<(), String> {
-        let size_of_val = std::mem::size_of_val(data);
-        unsafe {
-            let data = data.as_ptr() as *const u8;
-            let bytes = slice::from_raw_parts(data, size_of_val);
-            for (i, chunk) in bytes.chunks(BLOCK_SIZE as usize).enumerate() {
-                let block = Block::from(chunk);
-                storage
-                    .write_block(start_block + i as u64, &block)
-                    .map_err(|_| "Failed to write slice")?
-            }
-        }
-        Ok(())
     }
 }
 
@@ -87,11 +97,10 @@ impl FileSystem {
 pub struct Superblock {
     pub block_count: u64,
     pub inode_count: u64,
-    // Starting blocks for metadata regions
-    pub block_bitmap_start_block: u64,
+    // Starting blocks for regions (in order)
     pub inode_bitmap_start_block: u64,
+    pub block_bitmap_start_block: u64,
     pub inode_table_start_block: u64,
-    // Starting block for the data region
     pub data_start_block: u64,
 }
 

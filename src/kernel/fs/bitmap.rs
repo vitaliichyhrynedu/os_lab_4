@@ -21,25 +21,28 @@ impl Bitmap {
         None
     }
 
-    /// Marks the object at an index as used
-    pub fn allocate(&mut self, index: u64) -> Result<(), &'static str> {
+    /// Marks the object at an index as used and returns the index
+    pub fn allocate(&mut self, index: u64) -> Result<u64, &'static str> {
         let obj = self
             .allocs
             .get_mut(index as usize)
             .ok_or("Index out of bounds")?;
         *obj = Allocation::Used;
-        Ok(())
+        Ok(index)
     }
 
-    /// Marks objects at the start..end indices as used
-    pub fn allocate_span(&mut self, start: u64, end: u64) -> Result<(), &'static str> {
-        if end as usize > self.allocs.len() {
+    /// Marks objects at the start..end indices as used and returns the indices
+    pub fn allocate_span(&mut self, start: u64, end: u64) -> Result<Vec<u64>, &'static str> {
+        if start > end {
+            return Err("Invalid span");
+        } else if end as usize > self.allocs.len() {
             return Err("Span out of bounds");
         };
+        let mut indices = Vec::with_capacity((end - start) as usize);
         for i in start..end {
-            self.allocate(i)?;
+            indices.push(self.allocate(i)?);
         }
-        Ok(())
+        Ok(indices)
     }
 
     /// Marks the object at index as free
@@ -56,16 +59,6 @@ impl Bitmap {
     pub fn as_slice(&self) -> &[Allocation] {
         &self.allocs
     }
-
-    /// Constructs a bitmap from a slice of bytes
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
-        let count = bytes.len();
-        let mut allocs = Vec::with_capacity(count);
-        for &byte in bytes {
-            allocs.push(Allocation::try_from(byte)?);
-        }
-        Ok(Self { allocs })
-    }
 }
 
 /// Represents allocation state of an object
@@ -73,18 +66,6 @@ impl Bitmap {
 #[repr(u8)]
 pub enum Allocation {
     #[default]
-    Free = 0,
-    Used = 1,
-}
-
-impl TryFrom<u8> for Allocation {
-    type Error = &'static str;
-
-    fn try_from(byte: u8) -> Result<Self, Self::Error> {
-        match byte {
-            0 => Ok(Self::Free),
-            1 => Ok(Self::Used),
-            _ => Err("Unexpected byte"),
-        }
-    }
+    Free,
+    Used,
 }
