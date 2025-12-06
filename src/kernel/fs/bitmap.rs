@@ -73,8 +73,8 @@ impl Bitmap {
 #[repr(u8)]
 pub enum Allocation {
     #[default]
-    Free,
-    Used,
+    Free = 0,
+    Used = 1,
 }
 
 impl TryFrom<u8> for Allocation {

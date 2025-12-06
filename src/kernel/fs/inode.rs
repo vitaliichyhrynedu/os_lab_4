@@ -24,10 +24,22 @@ impl InodeTable {
     pub fn as_slice(&self) -> &[Inode] {
         &self.inodes
     }
+
+    /// Constructs an InodeTable from a slice of bytes
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let inode_size = size_of::<Inode>();
+        let count = bytes.len() / inode_size;
+        let mut inodes = Vec::with_capacity(count);
+        for chunk in bytes.chunks_exact(inode_size) {
+            let inode = unsafe { std::ptr::read_unaligned(chunk.as_ptr() as *const Inode) };
+            inodes.push(inode);
+        }
+        InodeTable { inodes }
+    }
 }
 
 /// Represents a file system object
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Inode {
     pub size: u64,
