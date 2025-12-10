@@ -1,0 +1,7 @@
+[package]
+name = "os_lab_4"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zerocopy = { version = "0.8.31", features = ["derive"] }
