@@ -117,14 +117,35 @@ pub enum FileType {
 #[derive(Default, Clone, Copy)]
 #[derive(FromBytes, IntoBytes, Immutable)]
 pub struct Extent {
-    pub start: usize,
-    pub end: usize,
+    start: usize,
+    end: usize,
 }
 
 impl Extent {
+    /// Returns the physical block that marks the start of the extent.
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    /// Returns the physical block that marks the end (exclusive) of the extent.
+    pub fn end(&self) -> usize {
+        self.end
+    }
+
     /// Checks whether the extent does not point to any physical blocks.
     pub fn is_null(&self) -> bool {
-        self.start == 0
+        self.start == 0 && self.end == 0
+    }
+
+    /// Zeroes out the extent.
+    pub fn nullify(&mut self) {
+        self.start = 0;
+        self.end = 0;
+    }
+
+    /// Shrinks the extent to specified length.
+    pub fn shrink(&mut self, length: usize) {
+        self.end = length;
     }
 
     /// Returns the number of blocks in this extent.

@@ -223,17 +223,16 @@ impl<'a> Transaction<'a> {
                     .block_map
                     .free(extent.span())
                     .map_err(|e| Error::Alloc(e))?;
-                extent.start = 0;
-                extent.end = 0;
+                extent.nullify();
             } else if blocks_passed + extent_len >= blocks_needed {
                 // Extent is partially needed
                 let blocks_keep = blocks_needed - blocks_passed;
-                let new_end = extent.start + blocks_keep;
+                let new_end = extent.start() + blocks_keep;
                 self.fs
                     .block_map
-                    .free((new_end, extent.end))
+                    .free((new_end, extent.end()))
                     .map_err(|e| Error::Alloc(e))?;
-                extent.end = new_end;
+                extent.shrink(blocks_keep);
             }
             blocks_passed += extent_len;
         }
@@ -339,8 +338,7 @@ impl<'a> Transaction<'a> {
                     .block_map
                     .free(extent.span())
                     .map_err(|e| Error::Alloc(e))?;
-                extent.start = 0;
-                extent.end = 0;
+                extent.nullify();
             }
             self.fs
                 .node_map
