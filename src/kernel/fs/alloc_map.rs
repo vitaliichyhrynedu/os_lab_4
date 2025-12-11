@@ -1,4 +1,4 @@
-use zerocopy::{IntoBytes, TryFromBytes};
+use zerocopy::{Immutable, IntoBytes, TryFromBytes};
 
 /// Tracks allocation state of objects.
 pub struct AllocMap {
@@ -100,7 +100,7 @@ impl AllocMap {
 
 /// Represents allocation state of an object.
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
-#[derive(TryFromBytes, IntoBytes)]
+#[derive(TryFromBytes, IntoBytes, Immutable)]
 #[repr(u8)]
 pub enum AllocFlag {
     #[default]
