@@ -95,12 +95,12 @@ impl<'a> Transaction<'a> {
         Ok(())
     }
 
-    /// Allocates a [Node], returning its index.
-    pub fn create_node(&mut self) -> Result<usize, Error> {
+    /// Allocates a [Node], returning it and its index.
+    pub fn create_node(&mut self) -> Result<(Node, usize), Error> {
         let node = Node::default();
         let (node_index, _) = self.fs.node_map.allocate(1).map_err(|e| Error::Alloc(e))?;
         self.write_node(node_index, node)?;
-        Ok(node_index)
+        Ok((node, node_index))
     }
 
     /// Allocates a physical block for the node and adds it to node's extents.
@@ -199,11 +199,17 @@ impl<'a> Transaction<'a> {
         filetype: FileType,
     ) -> Result<usize, Error> {
         let name = Name::new(name).map_err(|e| Error::Dir(e))?;
-        let node_index = self.create_node()?;
+
+        let (mut node, node_index) = self.create_node()?;
+        node.link_count += 1;
+
         let entry = DirectoryEntry::new(node_index, filetype, name);
         let mut parent = self.read_directory(parent_index)?;
         parent.add_entry(entry);
+
         self.write_directory(parent_index, &parent)?;
+        self.write_node(node_index, node)?;
+
         Ok(node_index)
     }
 

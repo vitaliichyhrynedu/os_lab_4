@@ -59,7 +59,7 @@ impl FileSystem {
         // Initialize the root directory
         {
             let mut tx = Transaction::new(&mut fs, storage);
-            let root_index = tx
+            let (_, root_index) = tx
                 .create_node()
                 .expect("Must be able to create the root node");
             assert!(root_index == ROOT_INDEX);
