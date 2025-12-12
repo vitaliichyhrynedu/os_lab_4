@@ -103,15 +103,6 @@ impl<'a> Transaction<'a> {
         Ok((node, node_index))
     }
 
-    /// Allocates a physical block for the node and adds it to node's extents.
-    /// Returns the index of the allocated physical block.
-    fn grow_node(&mut self, node: &mut Node) -> Result<usize, Error> {
-        //
-        let (block_index, _) = self.fs.block_map.allocate(1).map_err(|e| Error::Alloc(e))?;
-        node.add_block(block_index).map_err(|e| Error::Node(e))?;
-        Ok(block_index)
-    }
-
     /// Reads a number of bytes from the file starting from a given offset into the buffer.
     /// Returns the number of bytes read.
     pub fn read_file_at(
@@ -132,7 +123,7 @@ impl<'a> Transaction<'a> {
 
         while bytes_read != bytes_to_read {
             let curr_pos = offset + bytes_read;
-            let offset_in_block = curr_pos % BLOCK_SIZE;
+            let offset_in_block = curr_pos % BLOCK_SIZE; // First read might be unaligned
             let chunk_size = (BLOCK_SIZE - offset_in_block).min(bytes_to_read - bytes_read);
             match node.get_physical_block_from_offset(curr_pos) {
                 Some(block_index) => {
@@ -170,20 +161,29 @@ impl<'a> Transaction<'a> {
 
         while bytes_written != bytes_to_write {
             let curr_pos = offset + bytes_written;
-            let offset_in_block = curr_pos % BLOCK_SIZE;
-            let (block_index, has_grown) = match node.get_physical_block_from_offset(curr_pos) {
+            let offset_in_block = curr_pos % BLOCK_SIZE; // First read might be unaligned
+            let logic_block = Node::get_logical_block_from_offset(curr_pos);
+            let (phys_block, has_alloc) = match node.get_physical_block(logic_block) {
                 Some(index) => (index, false),
-                None => (self.grow_node(&mut node)?, true),
+                None => {
+                    // Allocate a physical block
+                    let (phys_block, _) =
+                        self.fs.block_map.allocate(1).map_err(|e| Error::Alloc(e))?;
+                    node.map_block(logic_block, phys_block)
+                        .map_err(|e| Error::Node(e))?;
+                    (phys_block, true)
+                }
             };
             let chunk_size = (BLOCK_SIZE - offset_in_block).min(bytes_to_write - bytes_written);
-            let mut block = if chunk_size == BLOCK_SIZE || has_grown {
+            // Don't need to read if it's a freshly allocated block
+            let mut block = if has_alloc {
                 Block::new()
             } else {
-                self.read_block(block_index)?
+                self.read_block(phys_block)?
             };
             block.data[offset_in_block..(offset_in_block + chunk_size)]
                 .copy_from_slice(&data[bytes_written..(bytes_written + chunk_size)]);
-            self.write_block(block_index, &block);
+            self.write_block(phys_block, &block);
             bytes_written += chunk_size;
         }
 
@@ -216,7 +216,7 @@ impl<'a> Transaction<'a> {
             if extent.is_null() {
                 break;
             }
-            let extent_len = extent.block_count();
+            let extent_len = extent.len();
             if blocks_passed >= blocks_needed {
                 // Extent is entirely beyond the size
                 self.fs
@@ -239,7 +239,7 @@ impl<'a> Transaction<'a> {
 
         node.size = size;
         self.write_node(node_index, node)?;
-        return Ok(());
+        Ok(())
     }
 
     /// Creates a file with the given name and type inside the specified parent directory, returning its node index.

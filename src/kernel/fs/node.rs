@@ -48,22 +48,26 @@ impl Node {
     }
 
     /// Resolves the logical block index into a physical block index.
-    pub fn get_physical_block(&self, logical_block: usize) -> Option<usize> {
-        let mut offset = logical_block;
+    pub fn get_physical_block(&self, logic_block: usize) -> Option<usize> {
+        let mut offset = logic_block;
         for extent in self.extents.iter().take_while(|e| !e.is_null()) {
-            let blocks_in_extent = extent.block_count();
-            if blocks_in_extent > offset {
-                return Some(extent.start + offset);
+            let extent_len = extent.len();
+            if extent_len > offset {
+                return if extent.is_hole() {
+                    None
+                } else {
+                    Some(extent.start + offset)
+                };
             }
-            offset -= blocks_in_extent;
+            offset -= extent_len;
         }
         None
     }
 
     /// Resolves the byte offset into a physical block index.
     pub fn get_physical_block_from_offset(&self, byte_offset: usize) -> Option<usize> {
-        let logical_block = Self::get_logical_block_from_offset(byte_offset);
-        self.get_physical_block(logical_block)
+        let logic_block = Self::get_logical_block_from_offset(byte_offset);
+        self.get_physical_block(logic_block)
     }
 
     /// Converts a byte offset into a logical block index
@@ -80,21 +84,90 @@ impl Node {
             .sum()
     }
 
-    /// Adds the physical block to node's extents.
-    pub fn add_block(&mut self, block_index: usize) -> Result<(), Error> {
+    /// Maps the logical block to the physical block.
+    pub fn map_block(&mut self, logic_block: usize, phys_block: usize) -> Result<(), Error> {
+        assert!(phys_block != 0);
+        let mut offset = logic_block;
+        for curr in 0..self.extents.len() {
+            if self.extents[curr].is_null() {
+                // All allocated extents were passed or there was none
+                if curr > 0 {
+                    // There is a previous extent
+                    let prev = curr - 1;
+                    let is_hole = self.extents[prev].is_hole();
+                    let logic_contiguous = offset == 0;
+                    let phys_contiguous = self.extents[prev].end == phys_block;
+                    let contiguous = logic_contiguous && phys_contiguous;
+                    if !is_hole && contiguous {
+                        // Can merge with the previous extent
+                        self.extents[prev].end += 1;
+                    }
+                }
+                if offset == 0 {
+                    self.extents[curr].start = phys_block;
+                    self.extents[curr].end = phys_block + 1;
+                } else {
+                    let next = curr + 1;
+                    if !(next < self.extents.len()) {
+                        return Err(Error::OutOfExtents);
+                    }
+                    // Make the current extent a hole and map the next one
+                    self.extents[curr].end = offset;
+                    self.extents[next].start = phys_block;
+                    self.extents[next].end = phys_block + 1;
+                }
+                return Ok(());
+            }
+
+            let blocks_in_curr = self.extents[curr].len();
+            if offset < blocks_in_curr {
+                // Logical block resides inside this extent
+                let is_hole = self.extents[curr].is_hole();
+                if !is_hole {
+                    return Err(Error::AlreadyMapped);
+                }
+
+                // Split the hole into three extents:
+                let mut exts = [Extent::default(); 3];
+                exts[0].end = offset; // Left hole
+                exts[1].start = phys_block;
+                exts[1].end = phys_block + 1;
+                exts[2].end = blocks_in_curr - offset - 1; // Right hole
+                // Remove empty hole, if there is one
+                // (i.e. the first/last block of the hole is mapped)
+                let exts: Vec<Extent> = exts.into_iter().filter(|e| !e.is_null()).collect();
+                let extra = exts.len() - 1; // How many new extents need to be inserted
+                let last = self.extents.iter().rposition(|e| !e.is_null()).unwrap();
+                if last + extra > (self.extents.len() - 1) {
+                    // No room for extent insertion
+                    return Err(Error::OutOfExtents);
+                }
+                let next = curr + 1;
+                self.extents.copy_within(next..=last, next + extra);
+                self.extents[curr..=(curr + extra)].copy_from_slice(&exts);
+
+                return Ok(());
+            }
+            offset -= blocks_in_curr;
+        }
+        Err(Error::OutOfExtents)
+    }
+
+    /// Appends a sparse region of 'count' logical blocks to the end of node's extents.
+    pub fn append_hole(&mut self, count: usize) -> Result<(), Error> {
+        assert!(count != 0);
         for i in 0..self.extents.len() {
             if self.extents[i].is_null() {
-                // Check if we can merge with the previous extent
+                // Check if can be merged with the previous extent
                 if i > 0 {
                     let prev_idx = i - 1;
-                    if self.extents[prev_idx].end == block_index {
-                        self.extents[prev_idx].end += 1;
+                    let prev = self.extents[prev_idx];
+                    if prev.is_hole() {
+                        self.extents[prev_idx].end += count;
                         return Ok(());
                     }
                 }
-                // Cannot merge (or first extent)
-                self.extents[i].start = block_index;
-                self.extents[i].end = block_index + 1;
+                self.extents[i].end = count;
                 return Ok(());
             }
         }
@@ -137,6 +210,11 @@ impl Extent {
         self.start == 0 && self.end == 0
     }
 
+    /// Checks whether the extent represents a sparse region.
+    pub fn is_hole(&self) -> bool {
+        self.start == 0 && self.end > 0
+    }
+
     /// Zeroes out the extent.
     pub fn nullify(&mut self) {
         self.start = 0;
@@ -149,7 +227,7 @@ impl Extent {
     }
 
     /// Returns the number of blocks in this extent.
-    pub fn block_count(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.end - self.start
     }
 
@@ -162,4 +240,5 @@ impl Extent {
 #[derive(Debug)]
 pub enum Error {
     OutOfExtents,
+    AlreadyMapped,
 }
