@@ -5,7 +5,7 @@ use crate::hardware::storage::block::BLOCK_SIZE;
 /// [Node] size.
 pub const NODE_SIZE: usize = size_of::<Node>();
 
-/// How many nodes fit in a [Block].
+/// How many nodes fit in a block.
 pub const NODES_PER_BLOCK: usize = BLOCK_SIZE / NODE_SIZE;
 
 /// How many extents a [Node] can have.
