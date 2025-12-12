@@ -151,7 +151,7 @@ impl<'a> Transaction<'a> {
         Ok(bytes_read)
     }
 
-    // NOTE: Doesn't allow to write past the end of the file yet.
+    // BUG: Doesn't allow to write past the end of the file yet.
     /// Writes a byte slice to the file starting from a given offset.
     /// Returns the number of byttes written.
     pub fn write_file_at(
@@ -168,6 +168,7 @@ impl<'a> Transaction<'a> {
 
         let bytes_to_write = data.len();
         let mut bytes_written = 0;
+        let mut node_updated = false;
 
         while bytes_written != bytes_to_write {
             let curr_pos = offset + bytes_written;
@@ -180,6 +181,7 @@ impl<'a> Transaction<'a> {
                     let (phys_block, _) = self.fs.block_map.allocate(1).map_err(Error::Alloc)?;
                     node.map_block(logic_block, phys_block)
                         .map_err(Error::Node)?;
+                    node_updated = true;
                     (phys_block, true)
                 }
             };
@@ -199,6 +201,10 @@ impl<'a> Transaction<'a> {
         let end_pos = offset + bytes_written;
         if end_pos > node.size {
             node.size = end_pos;
+            node_updated = true;
+        }
+
+        if node_updated {
             self.write_node(node_index, node)?;
         }
 
