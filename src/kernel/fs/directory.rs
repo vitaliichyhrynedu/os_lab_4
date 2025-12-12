@@ -87,7 +87,7 @@ impl DirEntry {
         Self::new(
             index,
             FileType::Dir,
-            DirEntryName::new(".").expect("'.' must be a valid directory entry name"),
+            DirEntryName::try_from(".").expect("'.' must be a valid directory entry name"),
         )
     }
 
@@ -96,7 +96,7 @@ impl DirEntry {
         Self::new(
             index,
             FileType::Dir,
-            DirEntryName::new("..").expect("'..' must be a valid directory entry name"),
+            DirEntryName::try_from("..").expect("'..' must be a valid directory entry name"),
         )
     }
 
@@ -122,25 +122,40 @@ pub struct DirEntryName {
 }
 
 impl DirEntryName {
-    /// Constructs a valid directory entry name from a string.
-    pub fn new(string: &str) -> Result<Self> {
-        let len = string.len();
+    /// Returns the directory entry name as a string slice `&str`.
+    ///
+    /// # Errors
+    /// Returns `Err` if:
+    /// - `self.bytes` is not a valid UTF-8 string (data corruption?)
+    pub fn as_str(&self) -> Result<&str> {
+        <&str>::try_from(self)
+    }
+}
+
+impl TryFrom<&str> for DirEntryName {
+    type Error = Error;
+
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
+        let len = value.len();
         if len > MAX_NAME_LEN {
-            return Err(Error::InvalidName);
+            return Err(Error::NameTooLong);
         }
         let mut bytes = [0u8; MAX_NAME_LEN];
-        bytes[..len].copy_from_slice(string.as_bytes());
+        bytes[..len].copy_from_slice(value.as_bytes());
         Ok(Self { bytes })
     }
+}
 
-    /// Returns the string representation of the name.
-    pub fn as_str(&self) -> &str {
-        let len = self
+impl<'a> TryFrom<&'a DirEntryName> for &'a str {
+    type Error = Error;
+
+    fn try_from(value: &'a DirEntryName) -> std::result::Result<Self, Self::Error> {
+        let len = value
             .bytes
             .iter()
             .position(|&b| b == 0)
             .unwrap_or(MAX_NAME_LEN);
-        str::from_utf8(&self.bytes[..len]).expect("'bytes' must contain a valid UTF-8 string")
+        str::from_utf8(&value.bytes[..len]).map_err(|_| Error::CorruptedName)
     }
 }
 
@@ -149,5 +164,6 @@ type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     EntryNotFound,
-    InvalidName,
+    NameTooLong,
+    CorruptedName,
 }

@@ -257,7 +257,7 @@ impl<'a> Transaction<'a> {
         name: &str,
         filetype: FileType,
     ) -> Result<usize> {
-        let name = DirEntryName::new(name).map_err(Error::Dir)?;
+        let name = DirEntryName::try_from(name).map_err(Error::Dir)?;
 
         let (mut node, node_index) = self.create_node(FileType::File)?;
         node.link_count += 1;
@@ -299,7 +299,7 @@ impl<'a> Transaction<'a> {
 
     /// Creates a hard link to the file with a given name.
     pub fn link_file(&mut self, parent_index: usize, node_index: usize, name: &str) -> Result<()> {
-        let name = DirEntryName::new(name).map_err(Error::Dir)?;
+        let name = DirEntryName::try_from(name).map_err(Error::Dir)?;
 
         let mut node = self.read_node(node_index)?;
         if node.filetype() != FileType::File {
@@ -318,7 +318,7 @@ impl<'a> Transaction<'a> {
 
     /// Removes a hard link to the file with a given name.
     pub fn unlink_file(&mut self, parent_index: usize, name: &str) -> Result<()> {
-        let name = DirEntryName::new(name).map_err(Error::Dir)?;
+        let name = DirEntryName::try_from(name).map_err(Error::Dir)?;
 
         let mut dir = self.read_directory(parent_index)?;
         let entry = dir.get_entry(name).ok_or(Error::FileNotFound)?;
