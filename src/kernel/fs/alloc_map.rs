@@ -35,7 +35,7 @@ impl AllocMap {
 
     /// Tries to allocate a contiguous span of objects of `count` length.
     /// On success, returns a (start, end) tuple, representing an exclusive range of indices.
-    pub fn allocate(&mut self, count: usize) -> Result<(usize, usize), Error> {
+    pub fn allocate(&mut self, count: usize) -> Result<(usize, usize)> {
         let span = self.find_free(count).ok_or(Error::OutOfSpace)?;
         for flag in &mut self.flags[span.0..span.1] {
             *flag = AllocFlag::Used;
@@ -44,7 +44,7 @@ impl AllocMap {
     }
 
     /// Tries to allocate the object at given index.
-    pub fn allocate_at(&mut self, index: usize) -> Result<(), Error> {
+    pub fn allocate_at(&mut self, index: usize) -> Result<()> {
         let flag = self.flags.get_mut(index).ok_or(Error::IndexOutOfBounds)?;
         if *flag == AllocFlag::Used {
             return Err(Error::ObjectOccupied);
@@ -58,7 +58,7 @@ impl AllocMap {
     /// # Panics
     /// Panics if:
     /// - `span` is not a valid span
-    pub fn allocate_span(&mut self, span: (usize, usize)) -> Result<(), Error> {
+    pub fn allocate_span(&mut self, span: (usize, usize)) -> Result<()> {
         assert!(span.0 < span.1);
         let span = self
             .flags
@@ -76,7 +76,7 @@ impl AllocMap {
     /// # Panics
     /// Panics if:
     /// - `span` is not a valid span
-    pub fn free(&mut self, span: (usize, usize)) -> Result<(), Error> {
+    pub fn free(&mut self, span: (usize, usize)) -> Result<()> {
         assert!(span.0 < span.1);
         let span = self
             .flags
@@ -109,7 +109,8 @@ pub enum AllocFlag {
     Used,
 }
 
-/// [AllocMap]-related errors.
+type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Debug)]
 pub enum Error {
     IndexOutOfBounds,

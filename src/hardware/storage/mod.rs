@@ -25,13 +25,13 @@ impl Storage {
     }
 
     /// Returns the copy of a persistent block at specified index.
-    pub fn read_block(&self, index: usize) -> Result<Block, Error> {
+    pub fn read_block(&self, index: usize) -> Result<Block> {
         let block = self.blocks.get(index).ok_or(Error::BlockIndexOutOfBounds)?;
         Ok(*block)
     }
 
     /// Returns a vector of copies of persistent blocks at specified indeces.
-    pub fn read_blocks(&self, indeces: &[usize]) -> Result<Box<[Block]>, Error> {
+    pub fn read_blocks(&self, indeces: &[usize]) -> Result<Box<[Block]>> {
         let mut blocks = Vec::with_capacity(indeces.len());
         for &i in indeces {
             let block = self.blocks.get(i).ok_or(Error::BlockIndexOutOfBounds)?;
@@ -41,7 +41,7 @@ impl Storage {
     }
 
     /// Writes data from the `src` block into the persistent block at specified index.
-    pub fn write_block(&mut self, index: usize, src: &Block) -> Result<(), Error> {
+    pub fn write_block(&mut self, index: usize, src: &Block) -> Result<()> {
         let dst = self
             .blocks
             .get_mut(index)
@@ -55,7 +55,7 @@ impl Storage {
     /// # Panics
     /// Panics if:
     /// - lengths of `srcs` and `indeces` are mismatched
-    pub fn write_blocks(&mut self, indeces: &[usize], srcs: &[Block]) -> Result<(), Error> {
+    pub fn write_blocks(&mut self, indeces: &[usize], srcs: &[Block]) -> Result<()> {
         assert!(
             srcs.len() == indeces.len(),
             "Length of 'srcs' {} does not equal to length of 'indeces' {}",
@@ -69,7 +69,8 @@ impl Storage {
     }
 }
 
-/// [Storage]-related errors.
+type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Debug)]
 pub enum Error {
     BlockIndexOutOfBounds,

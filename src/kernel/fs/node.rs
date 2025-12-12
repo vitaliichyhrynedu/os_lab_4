@@ -85,7 +85,7 @@ impl Node {
     }
 
     /// Maps the logical block to the physical block.
-    pub fn map_block(&mut self, logic_block: usize, phys_block: usize) -> Result<(), Error> {
+    pub fn map_block(&mut self, logic_block: usize, phys_block: usize) -> Result<()> {
         assert!(phys_block != 0);
         let mut offset = logic_block;
         for curr in 0..self.extents.len() {
@@ -154,7 +154,7 @@ impl Node {
     }
 
     /// Appends a sparse region of 'count' logical blocks to the end of node's extents.
-    pub fn append_hole(&mut self, count: usize) -> Result<(), Error> {
+    pub fn append_hole(&mut self, count: usize) -> Result<()> {
         assert!(count != 0);
         for i in 0..self.extents.len() {
             if self.extents[i].is_null() {
@@ -236,6 +236,8 @@ impl Extent {
         (self.start, self.end)
     }
 }
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {

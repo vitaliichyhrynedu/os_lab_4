@@ -81,7 +81,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Reads the node from the node table.
-    pub fn read_node(&self, node_index: usize) -> Result<Node, Error> {
+    pub fn read_node(&self, node_index: usize) -> Result<Node> {
         let block_index = self
             .get_node_block_index(node_index)
             .ok_or(Error::NodeIndexOutOfBounds)?;
@@ -96,7 +96,7 @@ impl<'a> Transaction<'a> {
     }
 
     // Queues a write of the node to the node table.
-    pub fn write_node(&mut self, node_index: usize, node: Node) -> Result<(), Error> {
+    pub fn write_node(&mut self, node_index: usize, node: Node) -> Result<()> {
         let block_index = self
             .get_node_block_index(node_index)
             .ok_or(Error::NodeIndexOutOfBounds)?;
@@ -110,7 +110,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Allocates a [Node], returning it and its index.
-    pub fn create_node(&mut self, filetype: FileType) -> Result<(Node, usize), Error> {
+    pub fn create_node(&mut self, filetype: FileType) -> Result<(Node, usize)> {
         let node = Node::new(filetype);
         let (node_index, _) = self.fs.node_map.allocate(1).map_err(Error::Alloc)?;
         self.write_node(node_index, node)?;
@@ -119,12 +119,7 @@ impl<'a> Transaction<'a> {
 
     /// Reads a number of bytes from the file starting from a given offset into the buffer.
     /// Returns the number of bytes read.
-    pub fn read_file_at(
-        &self,
-        node_index: usize,
-        offset: usize,
-        buf: &mut [u8],
-    ) -> Result<usize, Error> {
+    pub fn read_file_at(&self, node_index: usize, offset: usize, buf: &mut [u8]) -> Result<usize> {
         let node = self.read_node(node_index)?;
 
         if offset >= node.size {
@@ -163,7 +158,7 @@ impl<'a> Transaction<'a> {
         node_index: usize,
         offset: usize,
         data: &[u8],
-    ) -> Result<usize, Error> {
+    ) -> Result<usize> {
         let mut node = self.read_node(node_index)?;
 
         if offset > node.size {
@@ -210,7 +205,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Truncates the file to specified size.
-    pub fn truncate_file(&mut self, node_index: usize, size: usize) -> Result<(), Error> {
+    pub fn truncate_file(&mut self, node_index: usize, size: usize) -> Result<()> {
         let mut node = self.read_node(node_index)?;
 
         if node.filetype() != FileType::File {
@@ -261,7 +256,7 @@ impl<'a> Transaction<'a> {
         parent_index: usize,
         name: &str,
         filetype: FileType,
-    ) -> Result<usize, Error> {
+    ) -> Result<usize> {
         let name = Name::new(name).map_err(Error::Dir)?;
 
         let (mut node, node_index) = self.create_node(FileType::File)?;
@@ -278,7 +273,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Reads the directory.
-    pub fn read_directory(&self, node_index: usize) -> Result<Directory, Error> {
+    pub fn read_directory(&self, node_index: usize) -> Result<Directory> {
         let node = self.read_node(node_index)?;
         let mut buf = vec![0u8; node.size];
         self.read_file_at(node_index, 0, &mut buf)?;
@@ -288,14 +283,14 @@ impl<'a> Transaction<'a> {
     }
 
     /// Writes the directory.
-    pub fn write_directory(&mut self, node_index: usize, dir: &Directory) -> Result<(), Error> {
+    pub fn write_directory(&mut self, node_index: usize, dir: &Directory) -> Result<()> {
         let bytes = dir.as_slice().as_bytes();
         self.write_file_at(node_index, 0, bytes)?;
         Ok(())
     }
 
     /// Creates a directory with the given name inside the specified parent directory, returning its node index.
-    pub fn create_directory(&mut self, parent_index: usize, name: &str) -> Result<usize, Error> {
+    pub fn create_directory(&mut self, parent_index: usize, name: &str) -> Result<usize> {
         let node_index = self.create_file(parent_index, name, FileType::Directory)?;
         let dir = Directory::new(node_index, parent_index);
         self.write_directory(node_index, &dir)?;
@@ -303,12 +298,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Creates a hard link to the file with a given name.
-    pub fn link_file(
-        &mut self,
-        parent_index: usize,
-        node_index: usize,
-        name: &str,
-    ) -> Result<(), Error> {
+    pub fn link_file(&mut self, parent_index: usize, node_index: usize, name: &str) -> Result<()> {
         let name = Name::new(name).map_err(Error::Dir)?;
 
         let mut node = self.read_node(node_index)?;
@@ -327,7 +317,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Removes a hard link to the file with a given name.
-    pub fn unlink_file(&mut self, parent_index: usize, name: &str) -> Result<(), Error> {
+    pub fn unlink_file(&mut self, parent_index: usize, name: &str) -> Result<()> {
         let name = Name::new(name).map_err(Error::Dir)?;
 
         let mut dir = self.read_directory(parent_index)?;
@@ -366,11 +356,7 @@ impl<'a> Transaction<'a> {
 
     // Internal implementation of 'read_block'.
     // Separated to split borrows in some contexts.
-    fn _read_block(
-        storage: &Storage,
-        changes: &Changes,
-        block_index: usize,
-    ) -> Result<Block, Error> {
+    fn _read_block(storage: &Storage, changes: &Changes, block_index: usize) -> Result<Block> {
         // Check cached changes
         match changes.get(&block_index) {
             Some(block) => Ok(*block),
@@ -381,7 +367,7 @@ impl<'a> Transaction<'a> {
     }
 
     /// Reads the physical block.
-    pub fn read_block(&self, block_index: usize) -> Result<Block, Error> {
+    pub fn read_block(&self, block_index: usize) -> Result<Block> {
         Self::_read_block(self.storage, &self.changes, block_index)
     }
 
@@ -414,6 +400,8 @@ impl<'a> Transaction<'a> {
         }
     }
 }
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {

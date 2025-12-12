@@ -40,7 +40,7 @@ impl Directory {
     }
 
     /// Removes the entry from the directory, returning its node index.
-    pub fn remove_entry(&mut self, name: Name) -> Result<usize, Error> {
+    pub fn remove_entry(&mut self, name: Name) -> Result<usize> {
         let entry = self.get_mut_entry(name).ok_or(Error::EntryNotFound)?;
         let node_index = entry.index;
         entry.index = 0;
@@ -123,7 +123,7 @@ pub struct Name {
 
 impl Name {
     /// Constructs a valid directory entry name from a string.
-    pub fn new(string: &str) -> Result<Self, Error> {
+    pub fn new(string: &str) -> Result<Self> {
         let len = string.len();
         if len > MAX_NAME_LEN {
             return Err(Error::InvalidName);
@@ -143,6 +143,8 @@ impl Name {
         str::from_utf8(&self.bytes[..len]).expect("'bytes' must contain a valid UTF-8 string")
     }
 }
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
